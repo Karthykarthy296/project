@@ -1,6 +1,7 @@
-from sqlalchemy import create_engine, Column, Integer, String, Boolean, ForeignKey, JSON
+from sqlalchemy import create_engine, Column, Integer, String, Boolean, ForeignKey, JSON, DateTime, Float
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
+from datetime import datetime
 import os
 
 DATABASE_URL = "sqlite:///./shift_db_new.db"
@@ -17,6 +18,16 @@ class User(Base):
     password_hash = Column(String(255))
     role = Column(String(20)) # admin, manager, supervisor
 
+class Department(Base):
+    __tablename__ = "departments"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), unique=True, index=True)
+    code = Column(String(10), unique=True, index=True)
+    description = Column(String(255))
+    min_staff_per_shift = Column(Integer, default=1)
+    max_overtime_weekly = Column(Integer, default=10)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
 class Employee(Base):
     __tablename__ = "employees"
     id = Column(Integer, primary_key=True, index=True)
@@ -26,6 +37,9 @@ class Employee(Base):
     preferred_shift = Column(String(50))
     max_hours = Column(Integer)
     weekly_off = Column(String(20)) # Monday, Tuesday, etc.
+    department_id = Column(Integer, ForeignKey("departments.id"), index=True)
+    
+    department = relationship("Department")
     
 class Shift(Base):
     __tablename__ = "shifts"
@@ -55,3 +69,60 @@ class Leave(Base):
     date = Column(String(20), index=True)
     
     employee = relationship("Employee")
+
+class WeeklyOffSwap(Base):
+    __tablename__ = "weekly_off_swaps"
+    id = Column(Integer, primary_key=True, index=True)
+    employee_1_id = Column(Integer, ForeignKey("employees.id"))
+    employee_2_id = Column(Integer, ForeignKey("employees.id"))
+    old_off_day = Column(String(20))  # Employee 1's current weekly off day
+    new_off_day = Column(String(20))  # Employee 2's current weekly off day (what employee 1 wants)
+    status = Column(String(20), default="pending")  # pending, approved, rejected
+    approved_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    approved_at = Column(DateTime, nullable=True)
+    ai_validation_status = Column(JSON, nullable=True)  # AI validation results
+    rejection_reason = Column(String(255), nullable=True)
+    
+    employee_1 = relationship("Employee", foreign_keys=[employee_1_id])
+    employee_2 = relationship("Employee", foreign_keys=[employee_2_id])
+    approver = relationship("User")
+
+class OvertimeLog(Base):
+    __tablename__ = "overtime_logs"
+    id = Column(Integer, primary_key=True, index=True)
+    employee_id = Column(Integer, ForeignKey("employees.id"), index=True)
+    date = Column(String(20), index=True)
+    shift_id = Column(Integer, ForeignKey("shifts.id"))
+    regular_hours = Column(Float, default=8.0)
+    overtime_hours = Column(Float, default=0.0)
+    status = Column(String(20), default="pending")  # pending, approved, rejected
+    approved_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    approved_at = Column(DateTime, nullable=True)
+    ai_validation_status = Column(JSON, nullable=True)  # AI validation results
+    rejection_reason = Column(String(255), nullable=True)
+    week_start_date = Column(String(20), index=True)  # Monday of the week
+    
+    employee = relationship("Employee")
+    shift = relationship("Shift")
+    approver = relationship("User")
+
+class WeeklyShiftChange(Base):
+    __tablename__ = "weekly_shift_changes"
+    id = Column(Integer, primary_key=True, index=True)
+    employee_id = Column(Integer, ForeignKey("employees.id"), index=True)
+    week_start_date = Column(String(20), index=True)  # Monday of the week
+    original_shift_id = Column(Integer, ForeignKey("shifts.id"))
+    new_shift_id = Column(Integer, ForeignKey("shifts.id"))
+    change_date = Column(String(20))  # Date of the shift being changed
+    reason = Column(String(255))
+    status = Column(String(20), default="approved")  # approved, pending, rejected
+    changed_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    employee = relationship("Employee")
+    original_shift = relationship("Shift", foreign_keys=[original_shift_id])
+    new_shift = relationship("Shift", foreign_keys=[new_shift_id])
+    changer = relationship("User", foreign_keys=[changed_by])
