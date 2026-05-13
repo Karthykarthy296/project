@@ -3,6 +3,14 @@ import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import DashboardLayout, { AlertPanel, SearchContext } from '../components/DashboardLayout';
+
+const SafeSearchContext = () => {
+  try {
+    return useContext(SearchContext);
+  } catch (e) {
+    return { searchQuery: '', setSearchQuery: () => {} };
+  }
+};
 import { 
   Users, 
   UserPlus, 
@@ -26,13 +34,20 @@ import {
 const API_URL = 'http://127.0.0.1:8000';
 
 export default function Employees() {
-  const { searchQuery, setSearchQuery } = useContext(SearchContext);
+  const { searchQuery: contextSearch, setSearchQuery: setContextSearch } = SafeSearchContext();
+  const [searchQuery, setSearchQuery] = useState(contextSearch || '');
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [msg, setMsg] = useState('');
   const [editingId, setEditingId] = useState(null);
   const [formData, setFormData] = useState({ emp_id: '', name: '', skills: '', preferred_shift: 'Morning', max_hours: 40, weekly_off: 'Monday' });
   const [isAdding, setIsAdding] = useState(false);
+
+  const handleSearchChange = (value) => {
+    setSearchQuery(value);
+    if (setContextSearch) setContextSearch(value);
+  };
 
   const navigate = useNavigate();
   const role = localStorage.getItem('role') || 'User';
@@ -51,10 +66,15 @@ export default function Employees() {
       const res = await axios.get(`${API_URL}/employees`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      setEmployees(res.data);
+      setEmployees(Array.isArray(res.data) ? res.data : []);
+      setError(null);
     } catch (error) {
       console.error(error);
-      if (error.response?.status === 401) navigate('/login');
+      if (error.response?.status === 401) {
+        navigate('/login');
+      } else {
+        setError(error.response?.data?.detail || 'Failed to load employees');
+      }
     } finally {
       setLoading(false);
     }
@@ -172,13 +192,13 @@ export default function Employees() {
           <div className="flex flex-wrap items-center gap-4">
             <div className="relative group flex-1 min-w-[240px]">
                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors" size={18} />
-               <input 
-                 type="text" 
-                 placeholder="Search force by name, ID or skill..." 
-                 className="w-full bg-white border-2 border-slate-100 rounded-2xl py-3 pl-12 pr-6 text-sm font-bold focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all shadow-sm"
-                 value={searchQuery}
-                 onChange={(e) => setSearchQuery(e.target.value)}
-               />
+<input 
+                  type="text" 
+                  placeholder="Search force by name, ID or skill..." 
+                  className="w-full bg-white border-2 border-slate-100 rounded-2xl py-3 pl-12 pr-6 text-sm font-bold focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all shadow-sm"
+                  value={searchQuery}
+                  onChange={(e) => handleSearchChange(e.target.value)}
+                />
             </div>
             
             {canEdit && (

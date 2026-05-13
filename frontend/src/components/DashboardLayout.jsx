@@ -30,12 +30,16 @@ import {
   RefreshCw
 } from 'lucide-react';
 
-export const SearchContext = createContext({ searchQuery: '', setSearchQuery: () => {} });
+export const SearchContext = createContext({
+  searchQuery: '',
+  setSearchQuery: () => {},
+  _isMock: true
+});
 
 export const SearchProvider = ({ children }) => {
   const [searchQuery, setSearchQuery] = useState('');
   return (
-    <SearchContext.Provider value={{ searchQuery, setSearchQuery }}>
+    <SearchContext.Provider value={{ searchQuery, setSearchQuery, _isMock: false }}>
       {children}
     </SearchContext.Provider>
   );
@@ -46,7 +50,9 @@ const DashboardLayout = ({ title, children, role = "Employee" }) => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
-  const { searchQuery, setSearchQuery } = useContext(SearchContext);
+  const searchContext = useContext(SearchContext);
+  const searchQuery = searchContext?.searchQuery ?? '';
+  const setSearchQuery = searchContext?.setSearchQuery ?? (() => {});
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -326,10 +332,9 @@ export const AlertPanel = ({ title, message, type = 'info' }) => {
 };
 
 export const ShiftDisplay = ({ schedule, onUpdate }) => {
-  const shiftNames = schedule?.shifts ? Object.keys(schedule.shifts) : [];
+  const shiftNames = schedule && typeof schedule === 'object' && schedule.shifts ? Object.keys(schedule.shifts) : [];
   const [activeShift, setActiveShift] = useState('Morning');
 
-  // Sync activeShift if it's not in the current shiftNames
   useEffect(() => {
     if (shiftNames.length > 0 && !shiftNames.includes(activeShift)) {
       setActiveShift(shiftNames[0]);
@@ -338,7 +343,7 @@ export const ShiftDisplay = ({ schedule, onUpdate }) => {
     }
   }, [schedule, shiftNames, activeShift]);
 
-  if (!schedule) return (
+  if (!schedule || typeof schedule !== 'object') return (
     <div className="w-full py-32 rounded-[3rem] bg-white border-2 border-dashed border-slate-200 flex flex-col items-center justify-center gap-6">
       <div className="w-20 h-20 rounded-[2rem] bg-slate-50 flex items-center justify-center text-slate-300 animate-pulse">
         <Zap size={40} />
@@ -347,9 +352,9 @@ export const ShiftDisplay = ({ schedule, onUpdate }) => {
     </div>
   );
 
-  const currentShiftData = schedule.shifts?.[activeShift] || {};
-  const weeklyOffs = schedule.weekly_off || [];
-  const assigned = currentShiftData.employees || [];
+  const currentShiftData = (schedule.shifts && typeof schedule.shifts === 'object') ? (schedule.shifts[activeShift] || {}) : {};
+  const weeklyOffs = Array.isArray(schedule.weekly_off) ? schedule.weekly_off : [];
+  const assigned = Array.isArray(currentShiftData.employees) ? currentShiftData.employees : [];
 
   return (
     <div className="space-y-10">
@@ -427,18 +432,18 @@ export const ShiftDisplay = ({ schedule, onUpdate }) => {
               {weeklyOffs.length > 0 ? (
                 weeklyOffs.map((emp, i) => (
                   <motion.div 
-                    key={emp.id}
+                    key={emp?.id || i}
                     initial={{ opacity: 0, scale: 0.9, x: 20 }}
                     animate={{ opacity: 1, scale: 1, x: 0 }}
                     transition={{ delay: i * 0.04 }}
                     className="flex-shrink-0 flex items-center gap-4 px-6 py-4 bg-slate-50 border-2 border-transparent hover:border-orange-200 hover:bg-white rounded-[1.5rem] transition-all group/chip cursor-default shadow-sm hover:shadow-xl hover:shadow-orange-900/5 snap-start"
                   >
                     <div className="w-11 h-11 rounded-xl bg-white text-orange-500 flex items-center justify-center font-black text-sm border border-slate-100 group-hover/chip:bg-orange-500 group-hover/chip:text-white transition-all shadow-sm">
-                      {emp.name.charAt(0)}
+                      {(emp?.name || '?').charAt(0)}
                     </div>
                     <div>
-                      <p className="text-[15px] font-black text-slate-900 leading-none group-hover/chip:text-orange-600 transition-colors">{emp.name}</p>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em] mt-1.5">{emp.emp_id}</p>
+                      <p className="text-[15px] font-black text-slate-900 leading-none group-hover/chip:text-orange-600 transition-colors">{emp?.name || 'Unknown'}</p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em] mt-1.5">{emp?.emp_id || 'N/A'}</p>
                     </div>
                   </motion.div>
                 ))
@@ -466,74 +471,77 @@ export const ShiftDisplay = ({ schedule, onUpdate }) => {
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-8">
-            {assigned.map((item, idx) => (
-              <motion.div
-                key={item.emp_id}
-                initial={{ opacity: 0, y: 30 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: idx * 0.03 }}
-                className="group bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-xl shadow-black/[0.02] hover:shadow-[0_32px_64px_-12px_rgba(15,23,42,0.12)] hover:-translate-y-3 transition-all duration-700"
-              >
-                <div className="flex items-start justify-between mb-8">
-                  <div className="flex items-center gap-5">
-                    <div className="w-16 h-16 rounded-[1.5rem] bg-slate-50 border border-slate-100 flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-700 relative overflow-hidden ring-4 ring-slate-50/50">
-                      <User size={32} className="text-slate-300 group-hover:text-indigo-500 transition-colors duration-500" />
-                      <div className="absolute inset-0 bg-indigo-500 opacity-0 group-hover:opacity-5 transition-opacity"></div>
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-3">
-                        <h4 className="text-xl font-black text-slate-900 leading-tight tracking-tight group-hover:text-indigo-600 transition-colors duration-500">{item.name}</h4>
-                        <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 text-[9px] font-black uppercase tracking-widest">{item.emp_id}</span>
+            {assigned.map((item, idx) => {
+              if (!item || typeof item !== 'object') return null;
+              return (
+                <motion.div
+                  key={item?.emp_id || idx}
+                  initial={{ opacity: 0, y: 30 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: idx * 0.03 }}
+                  className="group bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-xl shadow-black/[0.02] hover:shadow-[0_32px_64px_-12px_rgba(15,23,42,0.12)] hover:-translate-y-3 transition-all duration-700"
+                >
+                  <div className="flex items-start justify-between mb-8">
+                    <div className="flex items-center gap-5">
+                      <div className="w-16 h-16 rounded-[1.5rem] bg-slate-50 border border-slate-100 flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-700 relative overflow-hidden ring-4 ring-slate-50/50">
+                        <User size={32} className="text-slate-300 group-hover:text-indigo-500 transition-colors duration-500" />
+                        <div className="absolute inset-0 bg-indigo-500 opacity-0 group-hover:opacity-5 transition-opacity"></div>
                       </div>
-                      <div className="flex items-center gap-2 mt-1.5">
-                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]"></span>
-                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
-                           {Array.isArray(item.skills) ? item.skills.join(', ') : (typeof item.skills === 'string' ? item.skills : (item.role || 'Personnel'))}
-                         </p>
-                      </div>
-                    </div>
-                  </div>
-                  <button className="text-slate-300 hover:text-slate-900 transition-colors p-1">
-                     <MoreVertical size={20} />
-                  </button>
-                </div>
-
-                <div className="space-y-5">
-                  <div className="flex items-center justify-between p-5 bg-slate-50 rounded-[1.5rem] group-hover:bg-indigo-50 group-hover:border-indigo-100 border border-transparent transition-all duration-500">
-                    <div className="flex items-center gap-4">
-                      <div className="p-2.5 rounded-xl bg-white shadow-sm text-indigo-500 group-hover:scale-110 transition-transform">
-                        <Clock size={18} />
-                      </div>
-                      <div className="flex flex-col">
-                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Deployment Time</span>
-                        <span className="text-sm font-black text-slate-900">{item.start_time} - {item.end_time}</span>
+                      <div>
+                        <div className="flex items-center gap-3">
+                          <h4 className="text-xl font-black text-slate-900 leading-tight tracking-tight group-hover:text-indigo-600 transition-colors duration-500">{item?.name || 'Unknown'}</h4>
+                          <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 text-[9px] font-black uppercase tracking-widest">{item?.emp_id || 'N/A'}</span>
+                        </div>
+                        <div className="flex items-center gap-2 mt-1.5">
+                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]"></span>
+                           <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
+                             {Array.isArray(item?.skills) ? item.skills.join(', ') : (typeof item?.skills === 'string' ? item.skills : (item?.role || 'Personnel'))}
+                           </p>
+                        </div>
                       </div>
                     </div>
+                    <button className="text-slate-300 hover:text-slate-900 transition-colors p-1">
+                       <MoreVertical size={20} />
+                    </button>
                   </div>
 
-                  <button 
-                    onClick={async () => {
-                      if(!window.confirm(`Mark ${item.name} as on leave for today and assign an AI replacement?`)) return;
-                      const token = localStorage.getItem('token');
-                      try {
-                        await axios.post('http://127.0.0.1:8000/apply-leave', { 
-                          employee_name: item.name, 
-                          date: new Date().toISOString().split('T')[0] 
-                        }, {
-                          headers: { Authorization: `Bearer ${token}` }
-                        });
-                        onUpdate && onUpdate();
-                      } catch(e) { 
-                        alert(e.response?.data?.detail || "Error assigning replacement"); 
-                      }
-                    }}
-                    className="w-full py-4 rounded-[1.5rem] text-white bg-indigo-600 border-2 border-indigo-600 text-sm font-black hover:bg-indigo-700 hover:border-indigo-700 transition-all duration-500 shadow-xl shadow-indigo-100 hover:shadow-indigo-900/20"
-                  >
-                    Assign Replacement
-                  </button>
-                </div>
-              </motion.div>
-            ))}
+                  <div className="space-y-5">
+                    <div className="flex items-center justify-between p-5 bg-slate-50 rounded-[1.5rem] group-hover:bg-indigo-50 group-hover:border-indigo-100 border border-transparent transition-all duration-500">
+                      <div className="flex items-center gap-4">
+                        <div className="p-2.5 rounded-xl bg-white shadow-sm text-indigo-500 group-hover:scale-110 transition-transform">
+                          <Clock size={18} />
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Deployment Time</span>
+                          <span className="text-sm font-black text-slate-900">{item?.start_time || '--'} - {item?.end_time || '--'}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <button 
+                      onClick={async () => {
+                        if(!window.confirm(`Mark ${item?.name || 'employee'} as on leave for today and assign an AI replacement?`)) return;
+                        const token = localStorage.getItem('token');
+                        try {
+                          await axios.post('http://127.0.0.1:8000/apply-leave', { 
+                            employee_name: item?.name, 
+                            date: new Date().toISOString().split('T')[0] 
+                          }, {
+                            headers: { Authorization: `Bearer ${token}` }
+                          });
+                          onUpdate && onUpdate();
+                        } catch(e) { 
+                          alert(e?.response?.data?.detail || "Error assigning replacement"); 
+                        }
+                      }}
+                      className="w-full py-4 rounded-[1.5rem] text-white bg-indigo-600 border-2 border-indigo-600 text-sm font-black hover:bg-indigo-700 hover:border-indigo-700 transition-all duration-500 shadow-xl shadow-indigo-100 hover:shadow-indigo-900/20"
+                    >
+                      Assign Replacement
+                    </button>
+                  </div>
+                </motion.div>
+              );
+            })}
           </div>
         </div>
       </div>
